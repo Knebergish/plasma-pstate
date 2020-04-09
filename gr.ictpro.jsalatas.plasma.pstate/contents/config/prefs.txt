@@ -1,0 +1,2 @@
+thermal_mode=performance
+powermizer=2

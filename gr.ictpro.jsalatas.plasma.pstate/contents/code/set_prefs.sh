@@ -18,6 +18,12 @@ LG_FAN_MODE=$LG_LAPTOP_DRIVER/fan_mode
 LG_BATTERY_CHARGE_LIMIT=$LG_LAPTOP_DRIVER/battery_care_limit
 LG_USB_CHARGE=$LG_LAPTOP_DRIVER/usb_charge
 
+PREFS_PATH="/usr/share/plasma/plasmoids/gr.ictpro.jsalatas.plasma.pstate/contents/config/prefs.txt"
+
+save_setting () {
+    sed -i "s/^\($1\s*=\s*\).*\$/\1$2/" $PREFS_PATH
+}
+
 check_lg_drivers() {
     if [ -d $LG_LAPTOP_DRIVER ]; then
         return 0
@@ -122,6 +128,9 @@ set_energy_perf () {
 
 set_thermal_mode () {
     smbios-thermal-ctl --set-thermal-mode=$1 2> /dev/null
+
+    thermal_mode=`smbios-thermal-ctl -g | grep -C 1 "Current Thermal Modes:"  | tail -n 1 | awk '{$1=$1;print}' | sed "s/\t//g" | sed "s/ /-/g" | tr "[A-Z]" "[a-z]" `
+    save_setting "thermal_mode" $thermal_mode
 }
 
 set_lg_battery_charge_limit(){
@@ -148,6 +157,9 @@ set_lg_fan_mode() {
 
 set_powermizer () {
     nvidia-settings -a "[gpu:0]/GpuPowerMizerMode=$1" 2> /dev/null
+
+    powermizer=`nvidia-settings -q GpuPowerMizerMode | grep "Attribute 'GPUPowerMizerMode'" | awk -F "): " '{print $2}'  | awk -F "." '{print $1}' `
+    save_setting "powermizer" $powermizer
 }
 
 set_lg_usb_charge()  {
@@ -162,6 +174,8 @@ set_lg_usb_charge()  {
 }
 
 read_all () {
+source $PREFS_PATH
+
 cpu_min_perf=`cat $CPU_MIN_PERF`
 cpu_max_perf=`cat $CPU_MAX_PERF`
 cpu_turbo=`cat $CPU_TURBO`
@@ -188,9 +202,6 @@ if [ -z "$energy_perf" ]; then
             s/(0x000000000000000f|EPB 15)/power/' | \
     awk '{ printf "%s\n", $2; }' | head -n 1`
 fi
-if check_dell_thermal; then
-    thermal_mode=`smbios-thermal-ctl -g | grep -C 1 "Current Thermal Modes:"  | tail -n 1 | awk '{$1=$1;print}' | sed "s/\t//g" | sed "s/ /-/g" | tr "[A-Z]" "[a-z]" `
-fi
 
 if check_lg_drivers; then
     lg_battery_charge_limit=`cat $LG_BATTERY_CHARGE_LIMIT`
@@ -213,10 +224,6 @@ if check_lg_drivers; then
     fi
 fi
 
-if check_nvidia; then
-    powermizer=`nvidia-settings -q GpuPowerMizerMode | grep "Attribute 'GPUPowerMizerMode'" | awk -F "): " '{print $2}'  | awk -F "." '{print $1}' ` 
-fi
-
 json="{"
 json="${json}\"cpu_min_perf\":\"${cpu_min_perf}\""
 json="${json},\"cpu_max_perf\":\"${cpu_max_perf}\""
@@ -229,17 +236,13 @@ json="${json},\"gpu_boost_freq\":\"${gpu_boost_freq}\""
 json="${json},\"gpu_cur_freq\":\"${gpu_cur_freq}\""
 json="${json},\"cpu_governor\":\"${cpu_governor}\""
 json="${json},\"energy_perf\":\"${energy_perf}\""
-if check_dell_thermal; then
-    json="${json},\"thermal_mode\":\"${thermal_mode}\""
-fi
+json="${json},\"thermal_mode\":\"${thermal_mode}\""
 if check_lg_drivers; then
     json="${json},\"lg_battery_charge_limit\":\"${lg_battery_charge_limit}\""
     json="${json},\"lg_usb_charge\":\"${lg_usb_charge}\""
     json="${json},\"lg_fan_mode\":\"${lg_fan_mode}\""
 fi
-if check_nvidia; then
-    json="${json},\"powermizer\":\"${powermizer}\""
-fi
+json="${json},\"powermizer\":\"${powermizer}\""
 json="${json}}"
 echo $json
 }
